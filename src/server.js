@@ -16,7 +16,7 @@ const server = app.listen(PORT, async () => {
     // await seedPlatformPermissions();
     // await seedAdminData(); // Uncomment if you want to run this too
     console.log("✅ Startup tasks completed.");
-    console.log("🚀 cicd pipeline");
+    console.log("🚀 cicd pipeline d");
   } catch (error) {
     console.error("❌ Failed to run startup seeders:", error);
   }

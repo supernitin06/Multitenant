@@ -1,29 +1,46 @@
-- name: Deploy & Restart App on EC2
-  uses: appleboy/ssh-action@v0.1.9
-  with:
-    host: ${{ secrets.EC2_HOST }}
-    username: ${{ secrets.EC2_USER }}
-    key: ${{ secrets.EC2_SSH_KEY }}
-    port: ${{ secrets.EC2_PORT || 22 }}
-    script: |
-      echo "👉 Loading NVM"
-      export NVM_DIR="/home/ubuntu/.nvm"
-      source "$NVM_DIR/nvm.sh"
-      source "$NVM_DIR/bash_completion"
+name: Deploy to EC2
 
-      echo "👉 Selecting Nodedd version v22.18.0"
-      export PATH="$PATH:/home/ubuntu/.nvm/versions/node/v22.18.0/bin"
+on:
+  push:
+    branches:
+      - main
 
-      echo "👉 Moving to project directory"
-      cd ${{ secrets.PROJECT_PATH }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-      echo "👉 Pulling latest code from GitHub"
-      git pull origin main 
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-      echo "👉 Installing dependencies"
-      npm install
+      - name: Deploy & Restart App on EC2
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          script: |
+            echo "👉 Loading NVM"
+            export NVM_DIR="/home/ubuntu/.nvm"
+            source "$NVM_DIR/nvm.sh"
+            source "$NVM_DIR/bash_completion"
 
-      echo "👉 Restarting PM2 service"
-      pm2 restart multitenant || pm2 start npm --name multitenant -- run dev
+            echo "👉 Selecting Noswdeg sversion v22.18.0"
+            export PATH="$PATH:/home/ubuntu/.nvm/versions/node/v22.18.0/bin"
 
-      echo "✅ Deployment completed successfully"
+            echo "👉 Moving to project directory"
+            cd ${{ secrets.PROJECT_PATH }}
+
+            echo "👉 Pulling latests code from GitHub"
+            git pull origin main 
+
+            echo "👉 Installing dependencies"
+            npm install
+
+            echo "👉 Restarting PM2 service"
+            pm2 restart multitenant || pm2 start npm --name multitenant -- run dev
+
+            echo "✅ Deployment completed successfully"
+
+           

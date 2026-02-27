@@ -26,7 +26,7 @@ jobs:
             source "$NVM_DIR/nvm.sh"
             source "$NVM_DIR/bash_completion"
 
-            echo "👉 Selecting Noswdeg xsversion v22.18.0"
+            echo "👉 Selecting Nosdwdeg xsversion v22.18.0"
             export PATH="$PATH:/home/ubuntu/.nvm/versions/node/v22.18.0/bin"
 
             echo "👉 Moving to project directory"

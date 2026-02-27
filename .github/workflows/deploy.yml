@@ -21,26 +21,29 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
           script: |
+            set -ex
+
             echo "👉 Loading NVM"
             export NVM_DIR="/home/ubuntu/.nvm"
             source "$NVM_DIR/nvm.sh"
             source "$NVM_DIR/bash_completion"
 
-            echo "👉 Selecting Nosdwdeg dxsversion v22.18.0"
-            export PATH="$PATH:/home/ubuntu/.nvm/versions/node/v22.18.0/bin"
+            echo "👉 Using Node v20.20.0"
+            nvm use 20
 
             echo "👉 Moving to project directory"
             cd ${{ secrets.PROJECT_PATH }}
 
-            echo "👉 Pulling latests code from GitHub"
-            git pull origin main 
+            echo "👉 Pulling latest code from GitHub"
+            git pull origin main
 
             echo "👉 Installing dependencies"
             npm install
+
+            echo "👉 Installing PM2 if not installed"
+            npm list -g pm2 || npm install -g pm2
 
             echo "👉 Restarting PM2 service"
             pm2 restart multitenant || pm2 start npm --name multitenant -- run dev
 
             echo "✅ Deployment completed successfully"
-
-           

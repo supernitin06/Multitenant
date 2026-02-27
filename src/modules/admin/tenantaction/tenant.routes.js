@@ -22,12 +22,10 @@ const router = Router();
 router.use("/management-staff", staffRoutes);
 
 // Middleware to ensure user login for these routes
-// (We apply it here so all sub-routes are protected and have req.user)
 router.use(authMiddleware);
-router.use("/", tenantRoutes);
 
-router.use(checkSubscription)
-
+// Check subscription for all following routes
+router.use(checkSubscription);
 
 router.use("/roles", roleRoutes);
 router.use("/features", featureRoutes);
@@ -36,8 +34,8 @@ router.use("/students", studentRoutes);
 router.use("/teachers", teacherRoutes);
 router.use("/exam", examinationRoutes);
 
-
-
+// Generic tenant-management routes (contains wildcard /:tenantId)
+router.use("/", tenantRoutes);
 
 // lATTER
 router.use("/tenant-settings", tenantSettingsRoutes);

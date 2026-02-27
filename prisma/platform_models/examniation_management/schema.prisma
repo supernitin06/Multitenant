@@ -1,0 +1,41 @@
+model Examination {
+  id               String         @id @default(uuid())
+  name             String         // e.g. Final Term Examination 2024
+  examType         String?        // e.g. Written, Practical
+  academicYear     String?        // e.g. 2024-2025
+  term             String?        // e.g. Mid-term, Final
+  startDate        DateTime?
+  endDate          DateTime?
+  description      String?
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  schedules        ExamSchedule[]
+
+  @@map("examinations")
+}
+
+model ExamSchedule {
+  id               String         @id @default(uuid())
+  examinationId    String
+  examination      Examination    @relation(fields: [examinationId], references: [id], onDelete: Cascade)
+  
+  subject          String
+  examDate         DateTime
+  startTime        String?        // e.g. 09:00 AM
+  endTime          String?        // e.g. 12:00 PM
+  className        String?        // e.g. Class 10th
+  roomNumber       String?
+  
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("exam_schedules")
+}

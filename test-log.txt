@@ -1,0 +1,19 @@
+Testing with planId: 0f54e870-6bcb-4eaf-b814-c4a0bb3d9782
+prisma:error 
+Invalid `prisma.subscription_Plan_Domain.findMany()` invocation:
+
+
+Inconsistent query result: Field domain is required to return data, got `null` instead.
+ERROR DETECTED:
+PrismaClientUnknownRequestError: 
+Invalid `prisma.subscription_Plan_Domain.findMany()` invocation:
+
+
+Inconsistent query result: Field domain is required to return data, got `null` instead.
+    at zn.handleRequestError (C:\BitMax\Erp_Backend\BT-ERP-Backend\node_modules\@prisma\client\runtime\library.js:121:7649)
+    at zn.handleAndLogRequestError (C:\BitMax\Erp_Backend\BT-ERP-Backend\node_modules\@prisma\client\runtime\library.js:121:6784)
+    at zn.request (C:\BitMax\Erp_Backend\BT-ERP-Backend\node_modules\@prisma\client\runtime\library.js:121:6491)
+    at async l (C:\BitMax\Erp_Backend\BT-ERP-Backend\node_modules\@prisma\client\runtime\library.js:130:9778)
+    at async test (file:///C:/BitMax/Erp_Backend/BT-ERP-Backend/test-query.js:11:25) {
+  clientVersion: '6.7.0'
+}

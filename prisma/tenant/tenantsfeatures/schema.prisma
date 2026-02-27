@@ -1,0 +1,48 @@
+model Feature {
+  id           String   @id @default(uuid())
+  feature_name String   @unique
+  feature_code String   @unique
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  domains      tenanFeaturedDomain_assign_features[]
+}
+
+
+
+model TenantFeatureDomain {
+  id          String   @id @default(uuid())
+  domain_name String   @unique   
+  price       Float?
+  description String? 
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  features    tenanFeaturedDomain_assign_features[]
+  plans       Subscription_Plan_Domain[]
+  dependencies DomainDependency[] @relation("DomainRequires")
+  requiredBy   DomainDependency[] @relation("RequiredBy")
+}
+
+
+
+
+model tenanFeaturedDomain_assign_features {
+  id        String @id @default(uuid())
+
+  domainId    String
+  domain_name String
+  domain    TenantFeatureDomain  @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  featureId String
+  feature_name String
+  feature   Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, featureId])
+}
+
+
+
+

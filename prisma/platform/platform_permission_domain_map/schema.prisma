@@ -1,0 +1,13 @@
+
+model PlatformPermissionDomainMap {
+  permissionId String
+  domainId     String
+
+  permission   PlatformPermission       @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  domain       PlatformPermissionDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  assignedAt   DateTime                 @default(now())
+
+  @@id([permissionId, domainId])
+  @@map("platform_permission_domain_map")
+}

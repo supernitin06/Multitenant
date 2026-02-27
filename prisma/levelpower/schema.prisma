@@ -1,0 +1,10 @@
+model levelPower {
+    id String @id @default(cuid())
+    tenantId String
+    tenantName String
+    tenant Tenant @relation(fields: [tenantId], references: [id])
+    role String
+    power Int
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}

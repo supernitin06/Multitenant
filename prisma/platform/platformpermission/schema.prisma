@@ -1,0 +1,26 @@
+
+model PlatformPermission {
+  id               String                        @id @default(uuid())
+  key              String                        @unique
+  description      String?
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+
+  roles            PlatformRolePermission[]
+  domains          PlatformPermissionDomainMap[]
+
+  @@map("platform_permission")
+}
+
+model PlatformRolePermission {
+  roleId           String
+  permissionId     String
+
+  role             PlatformRole             @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission       PlatformPermission       @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  assignedAt       DateTime                 @default(now())
+
+  @@id([roleId, permissionId])
+  @@map("platform_role_permission")
+}

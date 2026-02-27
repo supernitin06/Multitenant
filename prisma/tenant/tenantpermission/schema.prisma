@@ -1,0 +1,37 @@
+
+
+
+
+model TenantPermission {
+  id   String @id @default(uuid())
+  key  String @unique
+  name String
+
+  // Metadata for UI/Grouping
+  domains   TenantPermissionDomain[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relation to Join Table
+  roles TenantRolePermission[]
+
+  @@map("tenant_permission")
+}
+
+
+
+
+
+model TenantRolePermission {
+  roleId       String
+  permissionId String
+
+  role       TenantRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission TenantPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@id([roleId, permissionId])
+  @@map("tenant_role_permission")
+}
+

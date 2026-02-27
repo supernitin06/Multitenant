@@ -1,0 +1,11 @@
+model DomainDependency {
+  id           String @id @default(uuid())
+  domainId     String
+  requiresId   String
+
+  domain       TenantFeatureDomain @relation("DomainRequires", fields: [domainId], references: [id], onDelete: Cascade)
+  requires     TenantFeatureDomain @relation("RequiredBy", fields: [requiresId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, requiresId])
+  @@map("domain_dependency")
+}

@@ -1,0 +1,36 @@
+model Subscription_Plan {
+  id        String   @id @default(uuid())
+  name      String
+  price     Float
+  duration  Int
+  showon_tenant_dashboard Boolean  @default(true)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenants  Tenant[]
+  domains         Subscription_Plan_Domain[]
+  plan_history    TenantPlanHistory[]
+
+  @@map("subscription_plan")
+}
+
+// this is for linking subscription plan with domain and features
+// this is for linking subscription plan with domain and features
+
+
+model Subscription_Plan_Domain {
+  id                     String   @id @default(uuid())
+  subscription_planId    String
+  subscription_plan_name String
+  domainId               String
+  domain_name            String
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+ 
+  subscription_plan Subscription_Plan   @relation(fields: [subscription_planId], references: [id], onDelete: Cascade)
+  domain            TenantFeatureDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  @@unique([subscription_planId, domainId])
+  @@map("subscription_plan_domain")
+}

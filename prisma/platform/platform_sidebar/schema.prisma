@@ -1,0 +1,17 @@
+model PlatformSidebar {
+    id String @id @default(cuid())
+    name String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    assignToRole PlatformSidebarAssignToRole[]
+}
+
+model PlatformSidebarAssignToRole{
+    id String @id @default(cuid())
+    platformSidebarId String
+    roleId String
+    platformSidebar PlatformSidebar @relation(fields: [platformSidebarId], references: [id])
+    platformRole PlatformRole @relation(fields: [roleId], references: [id])
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}

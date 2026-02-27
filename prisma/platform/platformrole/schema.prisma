@@ -1,0 +1,18 @@
+
+model PlatformRole {
+  id               String                   @id @default(uuid())
+  name             String                   @unique
+  power            Int                      @default(10)
+  description      String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  permissions      PlatformRolePermission[]
+  staffs           PlatformStaff[]
+  sidebarAssignments PlatformSidebarAssignToRole[]
+
+  @@map("platform_role")
+}
+
+
+

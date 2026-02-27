@@ -1,0 +1,16 @@
+
+model SuperAdmin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      String   @default("SUPER_ADMIN")
+  power     String   @default("1000") // Highest power
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs     AuditLog[]
+  loginAttempts LoginAttempt[]
+
+  @@map("super_admin")
+}

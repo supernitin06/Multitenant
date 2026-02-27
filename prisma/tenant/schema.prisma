@@ -1,0 +1,39 @@
+model Tenant {
+  id                  String             @id @default(uuid())
+  tenantName          String
+  tenantType          String
+  tenantEmail         String?
+  tenantUsername      String?
+  tenantPassword      String?
+  tenantPhone         String?
+  tenantAddress       String?
+  tenantWebsite       String?
+  subscription_plan_start_date DateTime?
+  subscription_plan_end_date DateTime?
+  logoUrl             String?
+  faviconUrl          String?
+  themeColor          String?
+  isActive            Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  role                String             @default("TENANT_ADMIN")
+  type                String             @default("TENANT")
+  power               Int                @default(100)
+  subscription_planId String?
+  subscription_plan   Subscription_Plan?   @relation(fields: [subscription_planId], references: [id])
+  is_plan_assigned     Boolean              @default(false)
+  plan_history         TenantPlanHistory[]
+  users                User[]
+  roles                TenantRole[]
+  auditLogs            AuditLog[]
+  loginAttempts        LoginAttempt[]
+  levelPowers          levelPower[]
+  tenantStaff          TenantStaff[]
+  students             Student[]
+  teachers             Teacher[]
+  examinations         Examination[]
+  examSchedules         ExamSchedule[]
+  permissionDomains    TenantPermissionDomain[]
+
+  @@map("tenant")
+}

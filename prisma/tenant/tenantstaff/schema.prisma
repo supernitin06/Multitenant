@@ -1,0 +1,25 @@
+model TenantStaff {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  password         String
+  name             String?
+  roleId           String?
+  role             TenantRole?    @relation(fields: [roleId], references: [id])
+  power            Int            @default(10)
+  isActive         Boolean        @default(true)  
+  failedLoginCount Int            @default(0)
+  lockedUntil      DateTime?
+  lastLogin        DateTime?
+  lastLogout       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id])
+
+  auditLogs        AuditLog[]
+  loginAttempts    LoginAttempt[]
+
+  @@map("tenant_staff")
+}
+

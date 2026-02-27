@@ -1,0 +1,14 @@
+model TenantRole {
+  id          String           @id @default(uuid())
+  name        String
+  power       Int              @default(10) // Hierarchy level: higher level = more power
+  tenantId    String
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users       User[]
+  staffs      TenantStaff[]
+  permissions TenantRolePermission[]
+
+  @@unique([name, tenantId])
+  @@map("tenant_role")
+}
+

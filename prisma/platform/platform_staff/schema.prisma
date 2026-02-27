@@ -1,0 +1,21 @@
+model PlatformStaff{
+  id               String         @id @default(uuid())
+  email            String         @unique
+  password         String
+  name             String?
+  roleId           String?
+  role             PlatformRole?  @relation(fields: [roleId], references: [id])
+  power            Int            @default(10)
+  isActive         Boolean        @default(true)  
+  failedLoginCount Int            @default(0)
+  lockedUntil      DateTime?
+  lastLogin        DateTime?
+  lastLogout       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  auditLogs        AuditLog[]
+  loginAttempts    LoginAttempt[]
+
+  @@map("platform_management")
+}

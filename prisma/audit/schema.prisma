@@ -1,0 +1,75 @@
+model AuditLog {
+  id String @id @default(uuid())
+
+  actorType ActorType
+  tenantId  String?
+
+  // Separate actor FKs
+  superAdminId         String?
+  userId               String?
+  platformManagementId String?
+  tenantStaffId        String?
+
+  action   String
+  entity   String
+  entityId String?
+  meta     Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  tenant             Tenant?             @relation(fields: [tenantId], references: [id])
+  superAdmin         SuperAdmin?         @relation(fields: [superAdminId], references: [id])
+  user               User?               @relation(fields: [userId], references: [id])
+  platformManagement PlatformStaff?     @relation(fields: [platformManagementId], references: [id])
+  tenantStaff        TenantStaff?        @relation(fields: [tenantStaffId], references: [id])
+
+  @@index([tenantId])
+  @@index([actorType])
+  @@index([action])
+  @@map("audit_log")
+}
+
+model LoginAttempt {
+  id String @id @default(uuid())
+
+  actorType ActorType
+  tenantId  String?
+
+  superAdminId         String?
+  userId               String?
+  platformManagementId String?
+  tenantStaffId        String?
+
+  email   String
+  success Boolean
+  reason  String?
+
+  ipAddress String?
+  userAgent String?
+  device    String?
+
+  createdAt DateTime @default(now())
+
+  tenant             Tenant?             @relation(fields: [tenantId], references: [id])
+  superAdmin         SuperAdmin?         @relation(fields: [superAdminId], references: [id])
+  user               User?               @relation(fields: [userId], references: [id])
+  platformManagement PlatformStaff?     @relation(fields: [platformManagementId], references: [id])
+  tenantStaff        TenantStaff?        @relation(fields: [tenantStaffId], references: [id])
+
+  @@index([email])
+  @@index([actorType])
+  @@index([tenantId])
+  @@index([createdAt])
+  @@map("login_attempt")
+}
+
+enum ActorType {
+  SUPER_ADMIN
+  TENANT_USER
+  PLATFORM_MANAGEMENT
+  TENANT_STAFF
+}
+

@@ -32,8 +32,8 @@ jobs:
             echo "👉 Moving to project directory"
             cd ${{ secrets.PROJECT_PATH }}
 
-            echo "👉 Pulling latest code from GitHub"
-            git pull origin main
+            echo "👉 Pulling latests code from GitHub"
+            git pull origin main 
 
             echo "👉 Installing dependencies"
             npm install

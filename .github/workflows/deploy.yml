@@ -41,6 +41,4 @@ jobs:
             echo "👉 Restarting PM2 service"
             pm2 restart kalasquareaws || pm2 start npm --name kalasquareaws -- run dev
 
-            echo "✅ Deployment completed successfully"s 
-
-           
+            echo "✅ Deployment completed successfully"

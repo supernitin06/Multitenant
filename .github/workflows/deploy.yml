@@ -31,7 +31,7 @@ jobs:
             echo "👉 Using Node v20.20.0"
             nvm use 20
 
-            echo "👉 Moving to project directory"
+            echo "👉 Moving to project directoryf"
             cd ${{ secrets.PROJECT_PATH }}
 
             echo "👉 Pulling latest code from GitHub"

@@ -20,25 +20,27 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.EC2_PORT }}
-          script: |
+          script: 
             echo "👉 Loading NVM"
             export NVM_DIR="/home/ubuntu/.nvm"
             source "$NVM_DIR/nvm.sh"
             source "$NVM_DIR/bash_completion"
 
-            echo "👉 Selecting Node version v22.18.0"
-            export PATH="$PATH:/home/ubuntu/.nvm/versions/node/v22.18.0/bin"
+            echo "👉 Using Node v22.18.0"
+            nvm use 22.18.0
 
             echo "👉 Moving to project directory"
-            cd ${{ secrets.PROJECT_PATH }}
+            cd /home/ubuntu/Multitenant
 
-            echo "👉 Pulling latest code from GitHub"
+            echo "👉 Pulling latest code"
             git pull origin main
 
             echo "👉 Installing dependencies"
             npm install
 
-            echo "👉 Restarting PM2 service"
-            pm2 restart multitenant || pm2 start npm --name multitenant -- run dev
+            echo "👉 Restarting PM2 cleanly"
+            pm2 delete multitenant || true
+            pm2 start npm --name multitenant --cwd /home/ubuntu/Multitenant -- start
+            pm2 save
 
-            echo "✅ Deployment completed successfully"
+            echo "✅ Deployment completed successfully" 

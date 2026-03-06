@@ -37,6 +37,11 @@ import cloudinaryRoutes from "./modules/cloudinary/cloudinary.routes.js";
 // App Init
 // -----------------------------
 const app = express();
+
+app.use((req, res, next) => {
+  res.setHeader("X-Server-ID", process.env.SERVER_ID || "Unknown-Server");
+  next();
+});
 // -----------------------------
 // CORS
 // -----------------------------
@@ -104,10 +109,7 @@ app.post("/test-body", (req, res) => {
 
 const API_V1 = "/api/v1";
 
-app.use((req, res, next) => {
-  res.setHeader("X-Server-ID", process.env.SERVER_ID || "Unknown-Server");
-  next();
-});
+
 
 
 

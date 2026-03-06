@@ -445,6 +445,7 @@ export const toggleTenantStatus = async (req, res) => {
 
 
 
+
 export const tenatPlanHistory = async (req, res) => {
   try {
     const { tenantId } = req.params;
@@ -463,3 +464,4 @@ export const tenatPlanHistory = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to fetch tenant plan history" });
   }
 };
+

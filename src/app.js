@@ -106,7 +106,10 @@ app.post("/test-body", (req, res) => {
 // =============================
 const API_V1 = "/api/v1";
 
-
+app.use((req, res, next) => {
+  res.setHeader("X-Server-ID", "EC2-1");  // identifies this server
+  next();
+});
 
 
 

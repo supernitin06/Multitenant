@@ -45,29 +45,27 @@ app.use((req, res, next) => {
 // -----------------------------
 // CORS
 // -----------------------------
-const origins = process.env.CORS_ORIGINS || "*";
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
+      // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
       if (!origin) return callback(null, true);
 
-      // If CORS_ORIGINS is '*', strictly speaking we can't use credentials: true with wildcard.
-      // But for dev, we can reflect the origin.
-      if (origins === "*") {
+      if (allowedOrigins.includes(origin)) {
+        // Reflect the exact origin — required when credentials: true (wildcard * is forbidden)
         return callback(null, true);
       }
 
-      const allowedOrigins = origins.split(",");
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        // For development convenience, you might want to allow all origins by reflecting them:
-        // callback(null, true); 
-        // But let's stick to the env var or reflect if it's localhost
-        // If you are having trouble, un-comment the line below to allow ALL origins with credentials (dev only)
-        callback(null, true);
-      }
+      // Reject unknown origins
+      return callback(
+        new Error(`CORS: Origin '${origin}' is not allowed.`),
+        false
+      );
     },
     credentials: true,
   })

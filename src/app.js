@@ -50,22 +50,25 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .map((o) => o.trim())
   .filter(Boolean);
 
+// Any port on localhost / 127.0.0.1 / LAN IPs is allowed outside production,
+// so a frontend started on a different port or another laptop still works.
+const isLocalDevOrigin = (origin) =>
+  process.env.NODE_ENV !== "production" &&
+  /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
+
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        // Reflect the exact origin — required when credentials: true (wildcard * is forbidden)
+      // Reflect the exact origin — required when credentials: true (wildcard * is forbidden)
+      if (allowedOrigins.includes(origin) || isLocalDevOrigin(origin)) {
         return callback(null, true);
       }
 
-      // Reject unknown origins
-      return callback(
-        new Error(`CORS: Origin '${origin}' is not allowed.`),
-        false
-      );
+      console.warn(`CORS: blocked origin '${origin}'. Add it to CORS_ORIGINS in .env`);
+      return callback(null, false);
     },
     credentials: true,
   })

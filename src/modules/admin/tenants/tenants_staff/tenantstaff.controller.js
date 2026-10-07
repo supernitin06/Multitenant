@@ -1,292 +1,210 @@
 import prisma from "../../../../core/config/db.js";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import { writeAuditLog } from "../../../../platform/audit/audit.helper.js";
+import { writeAuditLog, auditActor } from "../../../../platform/audit/audit.helper.js";
 import logger from "../../../../core/utils/logger.js";
 
 /**
- * Register Tenant-Specific Staff
+ * Tenant staff = employees of a tenant who log in to the tenant portal.
+ * What they can do is decided by their TenantRole (role → permissions).
+ * A staff member's `power` always mirrors the power of their role.
+ */
+
+const TENANT_ADMIN_POWER = 100;
+const requesterPower = (user) => (user.type === "TENANT" ? TENANT_ADMIN_POWER : (user.power ?? 0));
+
+const staffSelect = {
+    id: true,
+    name: true,
+    email: true,
+    isActive: true,
+    power: true,
+    roleId: true,
+    role: { select: { id: true, name: true, power: true } },
+    lastLogin: true,
+    createdAt: true,
+};
+
+/**
+ * Find a role in this tenant and make sure the requester outranks it.
+ * Returns { role } or { error: [status, message] }.
+ */
+const resolveAssignableRole = async (req, roleId) => {
+    const role = await prisma.tenantRole.findFirst({ where: { id: roleId, tenantId: req.user.tenantId } });
+    if (!role) return { error: [404, "Role not found in this organisation"] };
+    if (req.user.type !== "TENANT" && role.power >= requesterPower(req.user)) {
+        return { error: [403, `You can only assign roles below your own level (${requesterPower(req.user)}).`] };
+    }
+    return { role };
+};
+
+/**
+ * Create staff member
+ * Body: { name, email, password, roleId }
  */
 export const registerTenantStaff = async (req, res) => {
     try {
-        const { email, password, name, role_name } = req.body;
-        const actorUserId = req.user.id;
+        const { email, password, name, roleId } = req.body;
         const tenantId = req.user.tenantId;
-        const actorType = req.user.type;
 
-        // Tenant Admin (TENANT type) has implicit power level 100
-        const actorPower = actorType === "TENANT" ? 100 : parseInt(req.user.power || "0");
-
-        if (!tenantId) {
-            return res.status(400).json({ success: false, message: "Tenant context required" });
+        if (!email || !password || !roleId) {
+            return res.status(400).json({ success: false, message: "Email, password and role are required" });
+        }
+        if (String(password).length < 6) {
+            return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
         }
 
-        if (!email || !password) {
-            return res.status(400).json({ success: false, message: "Email and password are required" });
-        }
+        const { role, error } = await resolveAssignableRole(req, roleId);
+        if (error) return res.status(error[0]).json({ success: false, message: error[1] });
 
-        // Fetch power level for the target role
-        let targetPower = 0;
-        if (role_name) {
-            const level = await prisma.levelPower.findFirst({
-                where: { role_name, tenantId }
-            });
-            if (level) {
-                targetPower = parseInt(level.power || "0");
-            }
-        }
-
-        // Power Level Validation: Creator power must be >= target role power
-        if (actorType !== "TENANT" && actorPower < targetPower) {
-            return res.status(403).json({
-                success: false,
-                message: `Insufficient power level. Your power (${actorPower}) is lower than the required power for role '${role_name}' (${targetPower}).`
-            });
-        }
-
-        const existing = await prisma.tenantStaff.findUnique({ where: { email } });
+        const normalisedEmail = String(email).trim().toLowerCase();
+        const existing = await prisma.tenantStaff.findFirst({ where: { email: { equals: normalisedEmail, mode: "insensitive" } } });
         if (existing) {
-            return res.status(409).json({ success: false, message: "Email already exists" });
+            return res.status(409).json({ success: false, message: "A staff member with this email already exists" });
         }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
 
         const staff = await prisma.tenantStaff.create({
             data: {
-                email,
-                password: hashedPassword,
+                email: normalisedEmail,
+                password: await bcrypt.hash(password, 10),
                 name,
-                role_name,
-                power: targetPower.toString(),
+                roleId: role.id,
+                power: role.power,
                 tenantId,
-                role: "STAFF"
             },
+            select: staffSelect,
         });
 
         await writeAuditLog({
-            actorType: actorType === "TENANT" ? "TENANT_ADMIN" : "TENANT_STAFF",
-            [actorType === "TENANT" ? "userId" : "staffId"]: actorUserId,
-            tenantId,
+            ...auditActor(req.user),
             action: "TENANT_STAFF_CREATED",
             entity: "TENANT_STAFF",
             entityId: staff.id,
-            meta: { name: staff.name, email: staff.email, role_name, power: targetPower },
+            meta: { name: staff.name, email: staff.email, role: role.name },
             req,
         });
 
-        res.status(201).json({
-            success: true,
-            message: "Tenant Staff created successfully",
-            staff: {
-                id: staff.id,
-                name: staff.name,
-                email: staff.email,
-                role_name: staff.role_name,
-                power: staff.power
-            }
-        });
+        res.status(201).json({ success: true, message: "Staff member created", staff });
     } catch (error) {
         logger.error("Register Tenant Staff Error:", error);
-        res.status(500).json({ success: false, message: "Failed to create tenant staff" });
+        res.status(500).json({ success: false, message: "Failed to create staff member" });
     }
 };
 
 /**
- * List Tenant-Specific Staff
+ * List staff of the current tenant
  */
 export const listTenantStaff = async (req, res) => {
     try {
-        const tenantId = req.user.tenantId;
-
-        if (!tenantId) {
-            return res.status(400).json({ success: false, message: "Tenant context required" });
-        }
-
         const staff = await prisma.tenantStaff.findMany({
-            where: { tenantId },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                role_name: true,
-                power: true,
-                isActive: true,
-                lastLogin: true,
-                createdAt: true
-            },
+            where: { tenantId: req.user.tenantId },
+            select: staffSelect,
             orderBy: { createdAt: "desc" },
         });
 
-        res.json({
-            success: true,
-            staff,
-        });
+        res.json({ success: true, staff });
     } catch (error) {
         logger.error("List Tenant Staff Error:", error);
-        res.status(500).json({ success: false, message: "Failed to fetch tenant staff" });
+        res.status(500).json({ success: false, message: "Failed to fetch staff" });
     }
 };
 
 /**
- * Update Tenant-Specific Staff
+ * Update staff member
+ * Body: { name?, isActive?, password?, roleId? }
  */
 export const updateTenantStaff = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, isActive, password, role_name } = req.body;
+        const { name, isActive, password, roleId } = req.body;
         const tenantId = req.user.tenantId;
-        const actorUserId = req.user.id;
 
-        const staff = await prisma.tenantStaff.findFirst({
-            where: { id, tenantId }
-        });
+        const staff = await prisma.tenantStaff.findFirst({ where: { id, tenantId } });
+        if (!staff) return res.status(404).json({ success: false, message: "Staff member not found" });
 
-        if (!staff) {
-            return res.status(404).json({ success: false, message: "Tenant staff not found" });
+        if (req.user.type !== "TENANT" && staff.power >= requesterPower(req.user)) {
+            return res.status(403).json({ success: false, message: "You cannot edit a staff member at or above your own level." });
+        }
+        if (req.user.type === "TENANT_STAFF" && req.user.id === id && isActive === false) {
+            return res.status(400).json({ success: false, message: "You cannot deactivate your own account" });
         }
 
         const updateData = {};
         if (name !== undefined) updateData.name = name;
-        if (isActive !== undefined) updateData.isActive = isActive;
+        if (isActive !== undefined) updateData.isActive = isActive === true || isActive === "true";
         if (password) {
-            updateData.password = await bcrypt.hash(password, 10);
-        }
-
-        if (role_name !== undefined) {
-            updateData.role_name = role_name;
-            const level = await prisma.levelPower.findFirst({
-                where: { role_name, tenantId }
-            });
-            if (level) {
-                updateData.power = level.power;
+            if (String(password).length < 6) {
+                return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
             }
+            updateData.password = await bcrypt.hash(password, 10);
+            updateData.failedLoginCount = 0;
+            updateData.lockedUntil = null;
+        }
+        if (roleId && roleId !== staff.roleId) {
+            const { role, error } = await resolveAssignableRole(req, roleId);
+            if (error) return res.status(error[0]).json({ success: false, message: error[1] });
+            updateData.roleId = role.id;
+            updateData.power = role.power;
         }
 
         const updatedStaff = await prisma.tenantStaff.update({
             where: { id },
-            data: updateData
+            data: updateData,
+            select: staffSelect,
         });
 
         await writeAuditLog({
-            actorType: "TENANT_USER",
-            userId: actorUserId,
-            tenantId,
+            ...auditActor(req.user),
             action: "TENANT_STAFF_UPDATED",
             entity: "TENANT_STAFF",
             entityId: id,
-            meta: { updates: Object.keys(updateData) },
+            meta: { updates: Object.keys(updateData).filter((k) => k !== "password") },
             req,
         });
 
-        res.json({ success: true, message: "Tenant staff updated", staff: updatedStaff });
-
+        res.json({ success: true, message: "Staff member updated", staff: updatedStaff });
     } catch (error) {
         logger.error("Update Tenant Staff Error:", error);
-        res.status(500).json({ success: false, message: "Failed to update tenant staff" });
+        res.status(500).json({ success: false, message: "Failed to update staff member" });
     }
-}
+};
 
 /**
- * Delete Tenant-Specific Staff
+ * Delete staff member
  */
 export const deleteTenantStaff = async (req, res) => {
     try {
         const { id } = req.params;
         const tenantId = req.user.tenantId;
-        const actorUserId = req.user.id;
 
-        const staff = await prisma.tenantStaff.findFirst({
-            where: { id, tenantId }
-        });
+        const staff = await prisma.tenantStaff.findFirst({ where: { id, tenantId } });
+        if (!staff) return res.status(404).json({ success: false, message: "Staff member not found" });
 
-        if (!staff) {
-            return res.status(404).json({ success: false, message: "Tenant staff not found" });
+        if (req.user.type === "TENANT_STAFF" && req.user.id === id) {
+            return res.status(400).json({ success: false, message: "You cannot delete your own account" });
+        }
+        if (req.user.type !== "TENANT" && staff.power >= requesterPower(req.user)) {
+            return res.status(403).json({ success: false, message: "You cannot delete a staff member at or above your own level." });
         }
 
-        await prisma.tenantStaff.delete({
-            where: { id }
-        });
+        // Audit rows reference the staff member, so detach them first
+        await prisma.$transaction([
+            prisma.auditLog.updateMany({ where: { tenantStaffId: id }, data: { tenantStaffId: null } }),
+            prisma.loginAttempt.updateMany({ where: { tenantStaffId: id }, data: { tenantStaffId: null } }),
+            prisma.tenantStaff.delete({ where: { id } }),
+        ]);
 
         await writeAuditLog({
-            actorType: "TENANT_USER",
-            userId: actorUserId,
-            tenantId,
+            ...auditActor(req.user),
             action: "TENANT_STAFF_DELETED",
             entity: "TENANT_STAFF",
             entityId: id,
+            meta: { email: staff.email },
             req,
         });
 
-        res.json({ success: true, message: "Tenant staff deleted successfully" });
-
+        res.json({ success: true, message: "Staff member deleted" });
     } catch (error) {
         logger.error("Delete Tenant Staff Error:", error);
-        res.status(500).json({ success: false, message: "Failed to delete tenant staff" });
-    }
-}
-
-/**
- * Login Tenant-Specific Staff
- */
-export const loginTenantStaff = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-
-        if (!email || !password) {
-            return res.status(400).json({ success: false, message: "Email and password are required" });
-        }
-
-        const staff = await prisma.tenantStaff.findUnique({ where: { email } });
-
-        if (!staff) {
-            return res.status(401).json({ success: false, message: "Invalid credentials" });
-        }
-
-        if (!staff.isActive) {
-            return res.status(403).json({ success: false, message: "Account is disabled" });
-        }
-
-        const isMatch = await bcrypt.compare(password, staff.password);
-        if (!isMatch) {
-            return res.status(401).json({ success: false, message: "Invalid credentials" });
-        }
-
-        const token = jwt.sign(
-            {
-                userId: staff.id,
-                tenantId: staff.tenantId,
-                email: staff.email,
-                role: staff.role,
-                type: "TENANT_STAFF"
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: "1d" }
-        );
-
-        res.cookie("token", token, {
-            httpOnly: true,
-            secure: true,
-            sameSite: "none",
-            maxAge: 24 * 60 * 60 * 1000,
-        });
-
-        res.json({
-            success: true,
-            message: "Tenant Staff login successful",
-            user: {
-                id: staff.id,
-                tenantId: staff.tenantId,
-                email: staff.email,
-                name: staff.name,
-                role: staff.role,
-                role_name: staff.role_name,
-                power: staff.power
-            }
-        });
-
-    } catch (error) {
-        logger.error("Tenant Staff Login Error:", error);
-        res.status(500).json({ success: false, message: "Login failed" });
+        res.status(500).json({ success: false, message: "Failed to delete staff member" });
     }
 };

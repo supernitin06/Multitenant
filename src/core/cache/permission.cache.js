@@ -1,19 +1,24 @@
 const permissionCache = new Map();
 
 /**
- * key: roleId
+ * key: "<scope>:<roleId>"  (scope = "platform" | "tenant")
  * value: Set of permission keys
  */
-export const getCachedPermissions = (roleId) => {
-  return permissionCache.get(roleId);
+export const getCachedPermissions = (key) => {
+  return permissionCache.get(key);
 };
 
-export const setCachedPermissions = (roleId, permissions) => {
-  permissionCache.set(roleId, new Set(permissions));
+export const setCachedPermissions = (key, permissions) => {
+  permissionCache.set(key, new Set(permissions));
 };
 
+// Role ids are UUIDs, so clearing both scopes is safe.
 export const clearRoleCache = (roleId) => {
-  permissionCache.delete(roleId);
+  permissionCache.delete(`platform:${roleId}`);
+  permissionCache.delete(`tenant:${roleId}`);
 };
 
-console.log("permissionCache", permissionCache);
+// Used when a permission itself is renamed or deleted.
+export const clearAllPermissionCache = () => {
+  permissionCache.clear();
+};

@@ -1,0 +1,21 @@
+// Classes / sections of a school tenant (table already exists as "classes")
+model Class {
+  id           String         @id @default(uuid())
+  name         String         // e.g. Class 10
+  section      String?        // e.g. A
+  academicYear String?        // e.g. 2024-25
+  description  String?
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenantId     String
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  students     Student[]
+  examinations Examination[]
+  schedules    ExamSchedule[]
+
+  @@unique([tenantId, name, section, academicYear])
+  @@map("classes")
+}

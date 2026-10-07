@@ -37,7 +37,7 @@ export const getSuperAdminDashboardSummary = async (req, res) => {
 
       prisma.user.count(),
 
-      prisma.subscription_plan.count(),
+      prisma.subscription_Plan.count(),
 
       prisma.tenant.count({
         where: { createdAt: { gte: thirtyDaysAgo } },

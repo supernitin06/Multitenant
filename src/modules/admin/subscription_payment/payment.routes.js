@@ -3,14 +3,20 @@ import {
     createSubscriptionOrder,
     verifyPayment,
     createSubscriptionQr,
-    checkPaymentStatus
+    checkPaymentStatus,
+    activateSubscription
 } from "./verify_payment.js";
 import { authMiddleware } from "../../../core/middlewares/auth.middleware.js";
 
 const router = Router();
 
-// Protect specific payment routes manually for now
-// router.use(authMiddleware);
+// Optional auth helper: runs authMiddleware if token is present, otherwise continues so body tenantUsername/tenantId can be used
+const optionalAuth = (req, res, next) => {
+    if (req.cookies?.token || req.headers.authorization) {
+        return authMiddleware(req, res, next);
+    }
+    next();
+};
 
 /**
  * @route POST /api/v1/subscription-payment/create-order
@@ -35,5 +41,11 @@ router.post("/create-qr", authMiddleware, createSubscriptionQr);
  * @desc Check QR payment status (Polling)
  */
 router.get("/check-status/:qrId", authMiddleware, checkPaymentStatus);
+
+/**
+ * @route POST /api/v1/subscription-payment/activate
+ * @desc Directly activate tenant subscription on payment completion and set isActive: true
+ */
+router.post("/activate", optionalAuth, activateSubscription);
 
 export default router;

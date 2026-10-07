@@ -1,6 +1,7 @@
 import prisma from "../../../core/config/db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { buildSession } from "../../auth/session.js";
 
 
 /**
@@ -128,12 +129,14 @@ export const loginSuperAdmin = async (req, res) => {
             success: true,
             message: "Login successful",
             token, // Token included for cross-IP dev capability
-            user: {
+            user: await buildSession({
                 id: user.id,
+                type: "SUPER_ADMIN",
                 email: user.email,
                 name: user.name,
                 role: user.role,
-            }
+                power: parseInt(user.power, 10) || 1000,
+            }),
         });
 
     } catch (error) {

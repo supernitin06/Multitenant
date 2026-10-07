@@ -1,78 +1,71 @@
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.js";
 
+/**
+ * Resolves the JWT (cookie `token` or `Authorization: Bearer`) into req.user.
+ *
+ * req.user always has: { id, type, email, name, role, roleId?, tenantId?, power? }
+ *  type = SUPER_ADMIN | PLATFORM_STAFF | TENANT | TENANT_STAFF | USER
+ *  role = human readable role name (e.g. "SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL")
+ */
 export const authMiddleware = async (req, res, next) => {
-  // 🍪 Check cookies first, then Authorization header
-  let token = req.cookies?.token;
-  console.log("Auth Debug - Token ffffffffff:", token);
+  // An explicit Bearer token wins over the cookie: the admin panel sends Bearer,
+  // the tenant app relies on the cookie, and both can share one browser.
+  const authHeader = req.headers.authorization;
+  let token = authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+  if (!token) token = req.cookies?.token;
 
   if (!token) {
-    const authHeader = req.headers.authorization;
-    console.log("Auth Debug - Auth Header:", authHeader);
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.split(" ")[1];
-      console.log("Auth Debug - Token from Header:", token ? "FOUND" : "MISSING");
-    } else {
-      console.log("Auth Debug - No valid Bearer token found in Header");
-    }
+    return res.status(401).json({ success: false, message: "Please log in to continue" });
   }
 
-  if (!token) {
-    return res.status(401).json({ message: "Authentication hdcb bdckj b" });
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ success: false, message: "Your session has expired. Please log in again" });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
     if (decoded.type === "SUPER_ADMIN") {
-      // ✅ Handle Super Admin
-      console.log("Auth Debug - Decoded:", decoded);
-      const admin = await prisma.superAdmin.findUnique({
-        where: { id: decoded.userId },
-      });
-      console.log("Auth Debug - Found Admin:", admin ? admin.id : "Not Found");
-
-      if (!admin) {
-        return res.status(401).json({ message: "Admin inactive or not found" });
-      }
+      const admin = await prisma.superAdmin.findUnique({ where: { id: decoded.userId } });
+      if (!admin) return res.status(401).json({ success: false, message: "Admin account not found" });
 
       req.user = {
         id: admin.id,
         email: admin.email,
         name: admin.name,
         role: admin.role,
+        power: parseInt(admin.power, 10) || 1000,
         type: "SUPER_ADMIN",
       };
     }
     else if (decoded.type === "PLATFORM_STAFF") {
-      // ✅ Handle Global Management Staff
       const staff = await prisma.platformStaff.findUnique({
         where: { id: decoded.userId },
+        include: { role: { select: { id: true, name: true, power: true } } },
       });
-
-      if (!staff || staff.isActive === false) {
-        return res.status(401).json({ message: "Staff inactive or not found" });
+      if (!staff || !staff.isActive) {
+        return res.status(401).json({ success: false, message: "Staff account is inactive or not found" });
       }
 
       req.user = {
         id: staff.id,
-        roleId: staff.roleId,
         email: staff.email,
         name: staff.name,
-        role: staff.role,
-        role_name: staff.role_name,
-        power: staff.power,
+        roleId: staff.roleId,
+        role: staff.role?.name || null,
+        power: staff.role?.power ?? staff.power,
         type: "PLATFORM_STAFF",
       };
     }
     else if (decoded.type === "TENANT_STAFF") {
-      // ✅ Handle Tenant Specific Staff
       const staff = await prisma.tenantStaff.findUnique({
         where: { id: decoded.userId },
+        include: { role: { select: { id: true, name: true, power: true } } },
       });
-
-      if (!staff || staff.isActive === false) {
-        return res.status(401).json({ message: "Tenant staff inactive or not found" });
+      if (!staff || !staff.isActive) {
+        return res.status(401).json({ success: false, message: "Staff account is inactive or not found" });
       }
 
       req.user = {
@@ -80,20 +73,19 @@ export const authMiddleware = async (req, res, next) => {
         tenantId: staff.tenantId,
         email: staff.email,
         name: staff.name,
-        role: staff.role,
-        role_name: staff.role_name,
-        power: staff.power,
+        roleId: staff.roleId,
+        role: staff.role?.name || null,
+        power: staff.role?.power ?? staff.power,
         type: "TENANT_STAFF",
       };
     }
     else if (decoded.type === "USER") {
-      // ✅ Handle Regular User (Simplified)
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
+        include: { role: { select: { id: true, name: true, power: true } } },
       });
-
-      if (!user || user.isActive === false) {
-        return res.status(401).json({ message: "User inactive or not found" });
+      if (!user || !user.isActive) {
+        return res.status(401).json({ success: false, message: "User account is inactive or not found" });
       }
 
       req.user = {
@@ -101,20 +93,16 @@ export const authMiddleware = async (req, res, next) => {
         tenantId: user.tenantId,
         email: user.email,
         name: user.name,
-        role: user.role,
+        roleId: user.roleId,
+        role: user.role?.name || null,
+        power: user.role?.power ?? 0,
         type: "USER",
       };
     }
     else if (decoded.type === "TENANT") {
-      // ✅    Handle Tenant Account Login
-      const tenantId = decoded.tenantId || decoded.userId; // Fallback for various token versions
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-      });
-
-      if (!tenant) {
-        return res.status(401).json({ message: "Tenant inactive or not found" });
-      }
+      const tenantId = decoded.tenantId || decoded.userId;
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+      if (!tenant) return res.status(401).json({ success: false, message: "Tenant account not found" });
 
       req.user = {
         id: tenant.id,
@@ -122,15 +110,17 @@ export const authMiddleware = async (req, res, next) => {
         email: tenant.tenantEmail,
         name: tenant.tenantName,
         role: tenant.role || "TENANT_ADMIN",
+        power: tenant.power ?? 100,
         type: "TENANT",
       };
+    }
+    else {
+      return res.status(401).json({ success: false, message: "Unknown session type" });
     }
 
     next();
   } catch (err) {
     console.error("Auth Middleware Error:", err);
-    return res.status(401).json({ message: "Invalid or expired token" });
+    return res.status(500).json({ success: false, message: "Could not verify your session" });
   }
 };
-
-

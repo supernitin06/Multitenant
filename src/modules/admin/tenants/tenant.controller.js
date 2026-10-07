@@ -2,6 +2,7 @@ import prisma from "../../../core/config/db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { writeAuditLog } from "../../../platform/audit/audit.helper.js";
+import { buildSession } from "../../auth/session.js";
 
 /**
  * SUPER ADMIN
@@ -154,7 +155,6 @@ export const createTenant = async (req, res) => {
  */
 export const loginTenant = async (req, res) => {
   try {
-    console.log("DEBUG: loginTenant called. Body:", req.body);
     const { tenantUsername, password } = req.body;
 
     if (!tenantUsername || !password) {
@@ -173,7 +173,7 @@ export const loginTenant = async (req, res) => {
     }
 
     const tenant = await prisma.tenant.findFirst({
-      where: { tenantUsername }
+      where: { tenantUsername: { equals: tenantUsername.trim(), mode: "insensitive" } }
     });
 
     console.log("DEBUG: Tenant search result:", tenant ? `Found ID: ${tenant.id}` : "NOT FOUND");
@@ -229,9 +229,21 @@ export const loginTenant = async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000, // 1 day
     });
 
+    const user = await buildSession({
+      id: tenant.id,
+      tenantId: tenant.id,
+      type: "TENANT",
+      email: tenant.tenantEmail,
+      name: tenant.tenantName,
+      role: tenant.role || "TENANT_ADMIN",
+      power: tenant.power ?? 100,
+    });
+
     res.json({
       success: true,
       message: "Tenant login successful",
+      token,
+      user,
       tenant: {
         id: tenant.id,
         tenantName: tenant.tenantName,
@@ -254,8 +266,7 @@ export const loginTenant = async (req, res) => {
     console.error("TENANT LOGIN ERROR:", error);
     res.status(500).json({
       success: false,
-      message: error.message || "Login failed",
-      debug_error: error.stack
+      message: "Login failed"
     });
   }
 };

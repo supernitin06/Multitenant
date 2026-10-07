@@ -1,7 +1,7 @@
 import prisma from "../../../core/config/db.js";
 import logger from "../../../core/utils/logger.js";
-import { writeAuditLog } from "../../../platform/audit/audit.helper.js";
-import { clearRoleCache } from "../../../core/cache/permission.cache.js";
+import { writeAuditLog, auditActor } from "../../../platform/audit/audit.helper.js";
+import { clearRoleCache, clearAllPermissionCache } from "../../../core/cache/permission.cache.js";
 
 /**
  * Create Platform Permission
@@ -11,7 +11,7 @@ export const createPlatformPermission = async (req, res) => {
         const { key, description, domainId } = req.body;
         if (!key) return res.status(400).json({ success: false, message: "Name is required" });
 
-        const upperKey = key.trim().toUpperCase();
+        const upperKey = key.trim().toUpperCase().replace(/\s+/g, "_");
 
         const existing = await prisma.platformPermission.findUnique({ where: { key: upperKey } });
         if (existing) return res.status(409).json({ success: false, message: "Permission Name already exists" });
@@ -55,7 +55,7 @@ export const updatePlatformPermission = async (req, res) => {
         const permission = await prisma.platformPermission.update({
             where: { id },
             data: {
-                key,
+                key: key ? key.trim().toUpperCase().replace(/\s+/g, "_") : undefined,
                 description,
                 domains: (domainId && Array.isArray(domainId)) ? {
                     deleteMany: {},
@@ -69,10 +69,39 @@ export const updatePlatformPermission = async (req, res) => {
             }
         });
 
+        clearAllPermissionCache();
         res.json({ success: true, message: "Permission updated successfully", permission });
     } catch (error) {
         logger.error("Update Platform Permission Error:", error);
         res.status(500).json({ success: false, message: "Failed to update platform permission" });
+    }
+};
+
+/**
+ * Delete Platform Permission (also removes it from every role and domain)
+ */
+export const deletePlatformPermission = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const existing = await prisma.platformPermission.findUnique({ where: { id } });
+        if (!existing) return res.status(404).json({ success: false, message: "Platform permission not found" });
+
+        await prisma.platformPermission.delete({ where: { id } });
+        clearAllPermissionCache();
+
+        await writeAuditLog({
+            ...auditActor(req.user),
+            action: "PLATFORM_PERMISSION_DELETED",
+            entity: "PLATFORM_PERMISSION",
+            entityId: id,
+            meta: { key: existing.key },
+            req,
+        });
+
+        res.json({ success: true, message: "Permission deleted successfully" });
+    } catch (error) {
+        logger.error("Delete Platform Permission Error:", error);
+        res.status(500).json({ success: false, message: "Failed to delete platform permission" });
     }
 };
 
@@ -95,7 +124,8 @@ export const assignPermissionsToDomain = async (req, res) => {
             }),
             // 2. Assign new permissions
             prisma.platformPermissionDomainMap.createMany({
-                data: permissionIds.map(permId => ({
+                skipDuplicates: true,
+                data: [...new Set(permissionIds)].map(permId => ({
                     domainId,
                     permissionId: permId
                 }))
@@ -155,10 +185,21 @@ export const assignPermissionsToPlatformRole = async (req, res) => {
         const actorUserId = req.user.id;
         const actorType = req.user.type;
 
-        if (!permissionId) return res.status(400).json({ success: false, message: "Permission ID is required" });
+        if (!permissionId || !roleId) return res.status(400).json({ success: false, message: "roleId and permissionId are required" });
 
         const role = await prisma.platformRole.findUnique({ where: { id: roleId } });
         if (!role) return res.status(404).json({ success: false, message: "Platform role not found" });
+
+        // Staff can only grant permissions to roles below them, and only permissions they hold
+        if (actorType !== "SUPER_ADMIN") {
+            if ((req.user.power ?? 0) <= role.power) {
+                return res.status(403).json({ success: false, message: "You can only change permissions of roles below your own level." });
+            }
+            const own = await prisma.platformRolePermission.findUnique({
+                where: { roleId_permissionId: { roleId: req.user.roleId, permissionId } }
+            });
+            if (!own) return res.status(403).json({ success: false, message: "You cannot grant a permission you do not have." });
+        }
 
         // Upsert to assign permission (create if not exists, nothing if it does)
         const existingPermission = await prisma.platformRolePermission.findUnique({
@@ -219,6 +260,10 @@ export const removePermissionFromPlatformRole = async (req, res) => {
         // Check if role exists
         const role = await prisma.platformRole.findUnique({ where: { id: roleId } });
         if (!role) return res.status(404).json({ success: false, message: "Platform role not found" });
+
+        if (actorType !== "SUPER_ADMIN" && (req.user.power ?? 0) <= role.power) {
+            return res.status(403).json({ success: false, message: "You can only change permissions of roles below your own level." });
+        }
 
         // Delete the permission assignment
         await prisma.platformRolePermission.delete({

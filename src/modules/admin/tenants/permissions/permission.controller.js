@@ -1,8 +1,7 @@
 import prisma from "../../../../core/config/db.js";
 import logger from "../../../../core/utils/logger.js";
-import { writeAuditLog } from "../../../../platform/audit/audit.helper.js";
-import { AUDIT_ACTIONS } from "../../../../platform/audit/audit.constants.js";
-import { clearRoleCache } from "../../../../core/cache/permission.cache.js";
+import { writeAuditLog, auditActor } from "../../../../platform/audit/audit.helper.js";
+import { clearRoleCache, clearAllPermissionCache } from "../../../../core/cache/permission.cache.js";
 
 /**
  * TENANT ADMIN
@@ -32,6 +31,7 @@ export const listTenantGroupedPermissions = async (req, res) => {
           id: p.id,
           key: p.key,
           name: p.name,
+          description: p.name,
         });
       });
 
@@ -63,8 +63,7 @@ export const createTenantPermission = async (req, res) => {
       return res.status(400).json({ success: false, message: "Key and Name are required" });
     }
 
-    const upperKey = key.trim().toUpperCase();
-    const upperName = name.trim().toUpperCase();
+    const upperKey = key.trim().toUpperCase().replace(/\s+/g, "_");
 
     const existing = await prisma.tenantPermission.findUnique({ where: { key: upperKey } });
     if (existing) {
@@ -74,7 +73,7 @@ export const createTenantPermission = async (req, res) => {
     const permission = await prisma.tenantPermission.create({
       data: {
         key: upperKey,
-        name: upperName,
+        name: name.trim(),
         domains: domainIds && Array.isArray(domainIds) ? { connect: domainIds.map(id => ({ id })) } : undefined
       }
     });
@@ -106,8 +105,8 @@ export const updateTenantPermission = async (req, res) => {
     const permission = await prisma.tenantPermission.update({
       where: { id },
       data: {
-        key,
-        name,
+        key: key ? key.trim().toUpperCase().replace(/\s+/g, "_") : undefined,
+        name: name ? name.trim() : undefined,
         domains: domainIds && Array.isArray(domainIds) ? {
           set: domainIds.map(id => ({ id }))
         } : undefined
@@ -132,6 +131,7 @@ export const deleteTenantPermission = async (req, res) => {
     await prisma.tenantPermission.delete({
       where: { id }
     });
+    clearAllPermissionCache();
 
     res.json({ success: true, message: "Permission deleted" });
   } catch (error) {
@@ -149,7 +149,6 @@ export const assignPermissionsToTenantRole = async (req, res) => {
     const { roleId } = req.params;
     const { permissions } = req.body;
     const tenantId = req.user.tenantId;
-    const actorUserId = req.user.id;
 
     if (!Array.isArray(permissions)) {
       return res.status(400).json({
@@ -172,12 +171,25 @@ export const assignPermissionsToTenantRole = async (req, res) => {
       });
     }
 
+    // Staff can only change roles that rank below them
+    if (req.user.type !== "TENANT" && (req.user.power ?? 0) <= role.power) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only change permissions of roles below your own level.",
+      });
+    }
+
+    const validCount = await prisma.tenantPermission.count({ where: { id: { in: permissions } } });
+    if (validCount !== new Set(permissions).size) {
+      return res.status(400).json({ success: false, message: "One or more permissions do not exist" });
+    }
+
     await prisma.$transaction([
       prisma.tenantRolePermission.deleteMany({
         where: { roleId },
       }),
       prisma.tenantRolePermission.createMany({
-        data: permissions.map((permissionId) => ({
+        data: [...new Set(permissions)].map((permissionId) => ({
           roleId,
           permissionId,
         })),
@@ -188,9 +200,7 @@ export const assignPermissionsToTenantRole = async (req, res) => {
     clearRoleCache(roleId);
 
     await writeAuditLog({
-      actorType: req.user.type === "TENANT" ? "TENANT_USER" : "TENANT_STAFF",
-      [req.user.type === "TENANT" ? "userId" : "tenantStaffId"]: actorUserId,
-      tenantId,
+      ...auditActor(req.user),
       action: "TENANT_PERMISSIONS_ASSIGNED",
       entity: "TENANT_ROLE",
       entityId: roleId,

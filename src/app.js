@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { authMiddleware } from "./core/middlewares/auth.middleware.js";
+import { buildSession } from "./modules/auth/session.js";
 
 // ----------------------------
 // 👑 Super Admin (Platform)
@@ -19,6 +20,7 @@ import featureRoutes from "./modules/admin/features/features.route.js";
 import platformstaffRoutes from "./modules/admin/platform/staff.routes.js";
 import platformRoleRoutes from "./modules/admin/platform/role.routes.js";
 import platformPermissionRoutes from "./modules/admin/platform/permission.routes.js";
+import tenantPermissionCatalogRoutes from "./modules/admin/tenants/permissions/catalog.routes.js";
 import featureDomainRoutes from "./modules/admin/feature_domain/feature_domain.route.js";
 import platformSidebarRoutes from "./modules/admin/platform/sidebar.routes.js";
 import subscriptionPaymentRoutes from "./modules/admin/subscription_payment/payment.routes.js";
@@ -28,8 +30,6 @@ import subscriptionPaymentRoutes from "./modules/admin/subscription_payment/paym
 import tenantRouter from "./modules/admin/tenantaction/tenant.routes.js";
 import { registerTenantStaff } from "./modules/admin/tenants/tenants_staff/tenantstaff.controller.js";
 import cloudinaryRoutes from "./modules/cloudinary/cloudinary.routes.js";
-
-
 
 // (Cleaned up individual imports)
 
@@ -80,11 +80,6 @@ app.use((req, res, next) => {
 // Global Middlewares
 // -----------------------------
 app.use(cookieParser());
-app.use((req, res, next) => {
-  console.log("🍪 COOKIES DEBUG:", req.cookies);
-  // console.log("🔐 SIGNED COOKIES DEBUG:", req.signedCookies);
-  next();
-});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -99,82 +94,7 @@ app.get("/", (req, res) => {
   });
 });
 
-app.post("/test-body", (req, res) => {
-  console.log("TEST BODY:", req.body);
-  res.json({ body: req.body });
-});
-
-
 const API_V1 = "/api/v1";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // -----------------------------
 // 👑 SUPER ADMIN (PLATFORM)
@@ -190,24 +110,15 @@ app.use(`${API_V1}/super-admin/platform-roles`, platformRoleRoutes);
 app.use(`${API_V1}/super-admin/permissions`, platformPermissionRoutes); // Permissions CRUD
 app.use(`${API_V1}/super-admin/platform-staff`, platformstaffRoutes);
 app.use(`${API_V1}/super-admin/platform-sidebar`, platformSidebarRoutes);
-
-
-
-
-
-
+app.use(`${API_V1}/super-admin/tenant-permissions`, tenantPermissionCatalogRoutes); // Tenant permission catalog
 
 app.use(`${API_V1}/super-admin/level-power`, levelPowerRoutes);
 
-
-
 app.use(`${API_V1}/super-admin/dashboard`, platformDashboardRoutes);
 app.use(`${API_V1}/audit-logs`, platformAuditRoutes);
+app.use(`${API_V1}/super-admin/audit-logs`, platformAuditRoutes); // same routes, under the admin panel base URL
 app.use(`${API_V1}/super-admin/modules`, modulesRoutes);
 app.use(`${API_V1}/cloudinary`, cloudinaryRoutes);
-
-
-
 
 // Global Tenant Login
 
@@ -224,37 +135,37 @@ app.post(`${API_V1}/auth/tenant/login`, loginTenant);
 app.post(`${API_V1}/auth/tenant/register`, createTenant);
 app.use(`${API_V1}/tenant/:tenantName`, tenantRouter);
 
-
-
-
-
-
-
-
-
 // -----------------------------
 // 🏫 TENANT AUTH & DYNAMIC ROUTES
 // -----------------------------
 
 // Global Auth Routes (Cookie-based)
-app.get(`${API_V1}/auth/me`, authMiddleware, (req, res) => {
-  res.json({
-    success: true,
-    user: req.user,
-  });
-});
+// Works for every session type (super admin, platform staff, tenant admin, tenant staff, user)
+const handleMe = async (req, res) => {
+  try {
+    res.json({ success: true, user: await buildSession(req.user) });
+  } catch (err) {
+    console.error("Auth me error:", err);
+    res.status(500).json({ success: false, message: "Failed to load session" });
+  }
+};
+app.get(`${API_V1}/auth/me`, authMiddleware, handleMe);
+app.get(`${API_V1}/auth/tenant/me`, authMiddleware, handleMe);
 
-app.post(`${API_V1}/auth/logout`, (req, res) => {
+const handleLogout = (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
     secure: true,
     sameSite: "none",
+    path: "/",
   });
   res.json({
     success: true,
     message: "Logged out successfully",
   });
-});
+};
+app.post(`${API_V1}/auth/logout`, handleLogout);
+app.post(`${API_V1}/auth/tenant/logout`, handleLogout);
 
 // -----------------------------
 // 404 Handler

@@ -3,29 +3,12 @@ import logger from "../../../core/utils/logger.js";
 import { writeAuditLog } from "../../../platform/audit/audit.helper.js";
 
 /**
- * Get internal level for the platform requester
+ * Power of the requester. Super Admin = 1000, platform staff = their role's power.
+ * A staff member may only create / edit / delete roles with LOWER power.
  */
 const getPlatformRequesterLevel = async (user) => {
-    try {
-        if (user.type === "SUPER_ADMIN") {
-            const admin = await prisma.superAdmin.findUnique({
-                where: { id: user.id },
-                select: { power: true }
-            });
-            return admin?.power ?? 1000;
-        }
-
-        if (user.type === "PLATFORM_MANAGEMENT") {
-            const staff = await prisma.platform_staff.findUnique({
-                where: { id: user.id },
-                select: { power: true }
-            });
-            return staff?.power ?? 0;
-        }
-    } catch (error) {
-        logger.error("Error in getPlatformRequesterLevel:", error);
-    }
-    return 0;
+    if (user.type === "SUPER_ADMIN") return user.power ?? 1000;
+    return user.power ?? 0;
 };
 
 /**
@@ -118,7 +101,8 @@ export const listPlatformRoles = async (req, res) => {
                     include: {
                         permission: true
                     }
-                }
+                },
+                _count: { select: { staffs: true } }
             },
             orderBy: { power: "desc" }
         });
@@ -154,9 +138,20 @@ export const updatePlatformRole = async (req, res) => {
             }
         }
 
-        const updatedRole = await prisma.platformRole.update({
-            where: { id },
-            data: { name, power: newPower, description },
+        const newName = name ? name.trim().toUpperCase() : undefined;
+        if (newName && newName !== role.name) {
+            const duplicate = await prisma.platformRole.findUnique({ where: { name: newName } });
+            if (duplicate) return res.status(409).json({ success: false, message: "Role already exists" });
+        }
+
+        const updatedRole = await prisma.$transaction(async (tx) => {
+            const updated = await tx.platformRole.update({
+                where: { id },
+                data: { name: newName, power: newPower, description },
+            });
+            // Staff power always mirrors their role's power
+            await tx.platformStaff.updateMany({ where: { roleId: id }, data: { power: newPower } });
+            return updated;
         });
 
         await writeAuditLog({
@@ -192,7 +187,15 @@ export const deletePlatformRole = async (req, res) => {
             return res.status(403).json({ success: false, message: "Cannot delete role of equal or higher authority." });
         }
 
-        await prisma.platformRole.delete({ where: { id } });
+        const staffCount = await prisma.platformStaff.count({ where: { roleId: id } });
+        if (staffCount > 0) {
+            return res.status(409).json({ success: false, message: `Move the ${staffCount} staff member(s) on "${role.name}" to another role before deleting it.` });
+        }
+
+        await prisma.$transaction([
+            prisma.platformSidebarAssignToRole.deleteMany({ where: { roleId: id } }),
+            prisma.platformRole.delete({ where: { id } }),
+        ]);
 
         await writeAuditLog({
             actorType: actorType === "SUPER_ADMIN" ? "SUPER_ADMIN" : "PLATFORM_MANAGEMENT",

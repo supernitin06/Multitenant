@@ -6,9 +6,9 @@ import logger from "../../../core/utils/logger.js";
  */
 export const createLevelPower = async (req, res) => {
     try {
-        const { tenantId, tenantName, role_name, power } = req.body;
+        const { tenantId, tenantName, role, power } = req.body;
 
-        if (!tenantId || !role_name || !power) {
+        if (!tenantId || !role || !power) {
             return res.status(400).json({ success: false, message: "Missing required fields" });
         }
 
@@ -16,8 +16,8 @@ export const createLevelPower = async (req, res) => {
             data: {
                 tenantId,
                 tenantName: tenantName || "Unknown",
-                role_name,
-                power: power.toString(),
+                role,
+                power: parseInt(power, 10),
             },
         });
 
@@ -54,13 +54,13 @@ export const getLevelPowers = async (req, res) => {
 export const updateLevelPower = async (req, res) => {
     try {
         const { id } = req.params;
-        const { power, role_name } = req.body;
+        const { power, role } = req.body;
 
         const updated = await prisma.levelPower.update({
             where: { id },
             data: {
-                power: power ? power.toString() : undefined,
-                role_name,
+                power: power ? parseInt(power, 10) : undefined,
+                role,
             },
         });
 

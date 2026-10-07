@@ -1,32 +1,24 @@
 import { Router } from "express";
-import { createUser, getUsers, updateUserByAdmin, deleteUser, bulkCreateUsers, restoreUser, toggleUserStatus, getUserDetails, listUsers, updateMyProfile } from "./user.controller.js";
-import { authMiddleware } from "../../../../core/middlewares/auth.middleware.js";
-import { requirePermission } from "../../../../core/middlewares/permission.middleware.js";
-import { checkDomainInPlan } from "../../../../core/middlewares/fetures.middleware.js";
-import { checkSubscription } from "../../../../core/middlewares/subscription.middleware.js";
+import { createUser, updateUserByAdmin, deleteUser, bulkCreateUsers, restoreUser, toggleUserStatus, getUserDetails, listUsers, updateMyProfile } from "./user.controller.js";
+import { requireTenantPermission } from "../../../../core/middlewares/permission.middleware.js";
 
-
-
+/**
+ * Tenant users — mounted at /api/v1/tenant/:tenantName/users
+ * (authMiddleware + checkSubscription are applied by the tenant router)
+ */
 const router = Router();
-router.use(authMiddleware);
-router.use(checkSubscription)
-router.use(checkDomainInPlan("USER_MANAGEMENT"))
 
-router.post("/create", authMiddleware, requirePermission("USER_CREATE"), createUser);
-router.get("/", authMiddleware, requirePermission("USER_READ"), getUsers);
-router.get("/details/:userId", authMiddleware, requirePermission("USER_READ"), getUserDetails);
-router.get("/list", authMiddleware, requirePermission("USER_READ"), listUsers);
-router.put("/update/:userId", authMiddleware, requirePermission("USER_UPDATE"), updateUserByAdmin);
-router.delete("/delete/:userId", authMiddleware, requirePermission("USER_DELETE"), deleteUser);
-router.post("/bulk-create", authMiddleware, requirePermission("USER_CREATE"), bulkCreateUsers);
-router.put("/toggle-status/:userId", authMiddleware, requirePermission("USER_UPDATE"), toggleUserStatus);
-router.put("/restore/:userId", authMiddleware, requirePermission("USER_UPDATE"), restoreUser);
-router.delete("/delete/:userId", authMiddleware, requirePermission("USER_DELETE"), deleteUser);
-router.put("/update-my-profile", authMiddleware, requirePermission("USER_UPDATE"), updateMyProfile);
+router.get("/", requireTenantPermission("USER_READ"), listUsers);
+router.get("/list", requireTenantPermission("USER_READ"), listUsers);
+router.get("/details/:userId", requireTenantPermission("USER_READ"), getUserDetails);
+router.post("/create", requireTenantPermission("USER_CREATE"), createUser);
+router.post("/bulk-create", requireTenantPermission("USER_CREATE"), bulkCreateUsers);
+router.put("/update/:userId", requireTenantPermission("USER_UPDATE"), updateUserByAdmin);
+router.put("/toggle-status/:userId", requireTenantPermission("USER_UPDATE"), toggleUserStatus);
+router.put("/restore/:userId", requireTenantPermission("USER_UPDATE"), restoreUser);
+router.delete("/delete/:userId", requireTenantPermission("USER_DELETE"), deleteUser);
 
-
-
-
-
+// Any logged-in user may edit their own name / password
+router.put("/update-my-profile", updateMyProfile);
 
 export default router;

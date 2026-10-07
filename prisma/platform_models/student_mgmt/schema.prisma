@@ -9,6 +9,7 @@ model Student {
   gender           String?
   dateOfBirth      DateTime?
   classId          String?
+  class            Class?         @relation(fields: [classId], references: [id], onDelete: Cascade)
   sectionId        String?
   address          String?
   parentName       String?

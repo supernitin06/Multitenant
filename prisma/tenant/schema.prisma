@@ -30,6 +30,7 @@ model Tenant {
   levelPowers          levelPower[]
   tenantStaff          TenantStaff[]
   students             Student[]
+  classes              Class[]
   teachers             Teacher[]
   examinations         Examination[]
   examSchedules         ExamSchedule[]

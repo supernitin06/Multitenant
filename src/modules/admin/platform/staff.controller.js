@@ -2,6 +2,14 @@ import prisma from "../../../core/config/db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { writeAuditLog } from "../../../platform/audit/audit.helper.js";
+import { buildSession } from "../../auth/session.js";
+
+/**
+ * Platform staff = people who operate the platform from the Super Admin panel.
+ * What they can do is decided by their PlatformRole; their `power` always
+ * mirrors the role's power. A staff member can only manage staff/roles with
+ * LOWER power than their own. The Super Admin can manage everyone.
+ */
 import logger from "../../../core/utils/logger.js";
 
 /**
@@ -14,8 +22,8 @@ export const registerPlatformStaff = async (req, res) => {
         const actorType = req.user.type;
         const actorPower = parseInt(req.user.power || "0");
 
-        if (!email || !password) {
-            return res.status(400).json({ success: false, message: "Email and password are required" });
+        if (!email || !password || !roleId) {
+            return res.status(400).json({ success: false, message: "Email, password and role are required" });
         }
         const role = await prisma.platformRole.findUnique({ where: { id: roleId } });
         if (!role) {
@@ -26,11 +34,11 @@ export const registerPlatformStaff = async (req, res) => {
         if (actorType !== "SUPER_ADMIN" && actorPower <= targetPower) {
             return res.status(403).json({
                 success: false,
-                message: `Insufficient power level. Your power (${actorPower}) is lower than the target power (${targetPower}).`
+                message: `You can only assign roles below your own level (${actorPower}). "${role.name}" has power ${targetPower}.`
             });
         }
 
-        const existing = await prisma.platformStaff.findUnique({ where: { email } });
+        const existing = await prisma.platformStaff.findFirst({ where: { email: { equals: String(email).trim(), mode: "insensitive" } } });
         if (existing) {
             return res.status(409).json({ success: false, message: "Email already exists" });
         }
@@ -39,7 +47,7 @@ export const registerPlatformStaff = async (req, res) => {
 
         const staff = await prisma.platformStaff.create({
             data: {
-                email,
+                email: String(email).trim().toLowerCase(),
                 password: hashedPassword,
                 name,
                 roleId,
@@ -83,6 +91,7 @@ export const registerPlatformStaff = async (req, res) => {
 export const listPlatformStaff = async (req, res) => {
     try {
         const staff = await prisma.platformStaff.findMany({
+            omit: { password: true },
             include: {
                 role: {
                     select: { id: true, name: true, power: true }
@@ -107,7 +116,7 @@ export const listPlatformStaff = async (req, res) => {
 export const updatePlatformStaff = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, isActive, password, roleId, power } = req.body;
+        const { name, isActive, password, roleId } = req.body;
         const actorUserId = req.user.id;
         const actorType = req.user.type;
 
@@ -119,18 +128,33 @@ export const updatePlatformStaff = async (req, res) => {
             return res.status(404).json({ success: false, message: "Platform management staff not found" });
         }
 
+        const actorPower = parseInt(req.user.power || "0");
+        if (actorType !== "SUPER_ADMIN" && staff.power >= actorPower) {
+            return res.status(403).json({ success: false, message: "You cannot edit a staff member at or above your own level." });
+        }
+
         const updateData = {};
         if (name !== undefined) updateData.name = name;
-        if (isActive !== undefined) updateData.isActive = isActive;
+        if (isActive !== undefined) updateData.isActive = isActive === true || isActive === "true";
         if (password) {
             updateData.password = await bcrypt.hash(password, 10);
+            updateData.failedLoginCount = 0;
+            updateData.lockedUntil = null;
         }
-        if (roleId !== undefined) updateData.roleId = roleId;
-        if (power !== undefined) updateData.power = parseInt(power);
+        if (roleId && roleId !== staff.roleId) {
+            const role = await prisma.platformRole.findUnique({ where: { id: roleId } });
+            if (!role) return res.status(404).json({ success: false, message: "Role not found" });
+            if (actorType !== "SUPER_ADMIN" && role.power >= actorPower) {
+                return res.status(403).json({ success: false, message: `You can only assign roles below your own level (${actorPower}).` });
+            }
+            updateData.roleId = role.id;
+            updateData.power = role.power;
+        }
 
         const updatedStaff = await prisma.platformStaff.update({
             where: { id },
             data: updateData,
+            omit: { password: true },
             include: { role: true }
         });
 
@@ -169,9 +193,19 @@ export const deletePlatformStaff = async (req, res) => {
             return res.status(404).json({ success: false, message: "Platform management staff not found" });
         }
 
-        await prisma.platformStaff.delete({
-            where: { id }
-        });
+        if (actorType === "PLATFORM_STAFF" && actorUserId === id) {
+            return res.status(400).json({ success: false, message: "You cannot delete your own account" });
+        }
+        if (actorType !== "SUPER_ADMIN" && staff.power >= parseInt(req.user.power || "0")) {
+            return res.status(403).json({ success: false, message: "You cannot delete a staff member at or above your own level." });
+        }
+
+        // Audit rows reference the staff member, so detach them first
+        await prisma.$transaction([
+            prisma.auditLog.updateMany({ where: { platformManagementId: id }, data: { platformManagementId: null } }),
+            prisma.loginAttempt.updateMany({ where: { platformManagementId: id }, data: { platformManagementId: null } }),
+            prisma.platformStaff.delete({ where: { id } }),
+        ]);
 
         await writeAuditLog({
             actorType: actorType === "SUPER_ADMIN" ? "SUPER_ADMIN" : "PLATFORM_MANAGEMENT",
@@ -201,8 +235,8 @@ export const loginPlatformStaff = async (req, res) => {
             return res.status(400).json({ success: false, message: "Email and password are required" });
         }
 
-        const staff = await prisma.platformStaff.findUnique({
-            where: { email },
+        const staff = await prisma.platformStaff.findFirst({
+            where: { email: { equals: String(email).trim(), mode: "insensitive" } },
             include: { role: true }
         });
 
@@ -214,10 +248,27 @@ export const loginPlatformStaff = async (req, res) => {
             return res.status(403).json({ success: false, message: "Account is disabled" });
         }
 
+        if (staff.lockedUntil && staff.lockedUntil > new Date()) {
+            return res.status(423).json({ success: false, message: "Too many failed attempts. Try again in a few minutes." });
+        }
+
         const isMatch = await bcrypt.compare(password, staff.password);
         if (!isMatch) {
+            const failed = (staff.failedLoginCount || 0) + 1;
+            await prisma.platformStaff.update({
+                where: { id: staff.id },
+                data: {
+                    failedLoginCount: failed >= 5 ? 0 : failed,
+                    lockedUntil: failed >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null,
+                },
+            });
             return res.status(401).json({ success: false, message: "Invalid credentials" });
         }
+
+        await prisma.platformStaff.update({
+            where: { id: staff.id },
+            data: { failedLoginCount: 0, lockedUntil: null, lastLogin: new Date() },
+        });
 
         const token = jwt.sign(
             {
@@ -237,21 +288,22 @@ export const loginPlatformStaff = async (req, res) => {
             secure: true,
             sameSite: "none",
             maxAge: 24 * 60 * 60 * 1000,
+            path: "/",
         });
 
         res.json({
             success: true,
             message: "Platform Management Staff login successful",
             token,
-            user: {
+            user: await buildSession({
                 id: staff.id,
+                type: "PLATFORM_STAFF",
                 email: staff.email,
                 name: staff.name,
-                role: staff.role,
-                power: staff.power,
+                role: staff.role?.name || null,
                 roleId: staff.roleId,
-                type: "PLATFORM_STAFF"
-            }
+                power: staff.role?.power ?? staff.power,
+            }),
         });
 
     } catch (error) {

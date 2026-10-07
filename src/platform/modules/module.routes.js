@@ -17,8 +17,12 @@ import {
 } from "./module.controller.js";
 
 import { authMiddleware } from "../../core/middlewares/auth.middleware.js";
+import { checkSuperAdmin } from "../../core/middlewares/superadmin.middleware.js";
 
 const router = Router();
+
+// Legacy module catalog — Super Admin only
+router.use(authMiddleware, checkSuperAdmin);
 
 // 👑 MODULE CATALOG
 router.post("/", authMiddleware, createModule);

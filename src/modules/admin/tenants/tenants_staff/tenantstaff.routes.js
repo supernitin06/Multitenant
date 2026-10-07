@@ -4,23 +4,19 @@ import {
     listTenantStaff,
     updateTenantStaff,
     deleteTenantStaff,
-    loginTenantStaff,
 } from "./tenantstaff.controller.js";
-import { authMiddleware } from "../../../../core/middlewares/auth.middleware.js";
+import { requireTenantPermission } from "../../../../core/middlewares/permission.middleware.js";
 
-import { upload, setUploadFolder } from "../../../../core/middlewares/multer.middleware.js";
-
+/**
+ * Mounted at /api/v1/tenant/:tenantName/management-staff
+ * (authMiddleware is applied by the tenant router; staff log in via
+ *  POST /api/v1/tenant/:tenantName/login)
+ */
 const router = express.Router();
 
-// Public login for tenant staff
-router.post("/login", loginTenantStaff);
-
-// Protected routes
-router.use(authMiddleware);
-
-router.post("/register", setUploadFolder("staff_profiles"), upload.single("profileImage"), registerTenantStaff);
-router.get("/", listTenantStaff);
-router.patch("/:id", setUploadFolder("staff_profiles"), upload.single("profileImage"), updateTenantStaff);
-router.delete("/:id", deleteTenantStaff);
+router.get("/", requireTenantPermission("VIEW_TENANT_STAFF"), listTenantStaff);
+router.post("/register", requireTenantPermission("CREATE_TENANT_STAFF"), registerTenantStaff);
+router.patch("/:id", requireTenantPermission("UPDATE_TENANT_STAFF"), updateTenantStaff);
+router.delete("/:id", requireTenantPermission("DELETE_TENANT_STAFF"), deleteTenantStaff);
 
 export default router;

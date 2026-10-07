@@ -6,7 +6,7 @@ import {
     updateTeacher,
     deleteTeacher,
 } from "./teachers.controller.js";
-import { requirePermission } from "../../../../../core/middlewares/permission.middleware.js";
+import { requireTenantPermission } from "../../../../../core/middlewares/permission.middleware.js";
 import { checkDomainInPlan } from "../../../../../core/middlewares/fetures.middleware.js";
 
 import { upload, setUploadFolder } from "../../../../../core/middlewares/multer.middleware.js";
@@ -17,10 +17,10 @@ const router = Router();
 // This domain name should match the one assigned in the subscription plan
 router.use(checkDomainInPlan("ACADEMIC"));
 
-router.post("/", requirePermission("CREATE_TEACHER"), setUploadFolder("teacher_profiles"), upload.single("profileImage"), createTeacher);
-router.get("/", requirePermission("READ_TEACHER"), listTeachers);
-router.get("/:id", requirePermission("READ_TEACHER"), getTeacherDetails);
-router.put("/:id", requirePermission("UPDATE_TEACHER"), setUploadFolder("teacher_profiles"), upload.single("profileImage"), updateTeacher);
-router.delete("/:id", requirePermission("DELETE_TEACHER"), deleteTeacher);
+router.post("/", requireTenantPermission("CREATE_TEACHER"), setUploadFolder("teacher_profiles"), upload.single("profileImage"), createTeacher);
+router.get("/", requireTenantPermission("READ_TEACHER"), listTeachers);
+router.get("/:id", requireTenantPermission("READ_TEACHER"), getTeacherDetails);
+router.put("/:id", requireTenantPermission("UPDATE_TEACHER"), setUploadFolder("teacher_profiles"), upload.single("profileImage"), updateTeacher);
+router.delete("/:id", requireTenantPermission("DELETE_TEACHER"), deleteTeacher);
 
 export default router;

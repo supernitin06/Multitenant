@@ -1,10 +1,11 @@
 
+import "dotenv/config";
 import prisma from './src/core/config/db.js';
 
 async function main() {
     try {
         const admins = await prisma.superAdmin.findMany({
-            select: { id: true, email: true, isActive: true }
+            select: { id: true, email: true, name: true, role: true }
         });
         console.log(JSON.stringify(admins, null, 2));
     } catch (error) {

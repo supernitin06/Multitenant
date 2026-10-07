@@ -280,3 +280,111 @@ export const verifyPayment = async (req, res) => {
     }
 };
 
+/**
+ * 👑 Activate Subscription directly (called by payment flow / dummy payment)
+ * POST /api/v1/subscription-payment/activate
+ */
+export const activateSubscription = async (req, res) => {
+    try {
+        const { planId, tenantId: bodyTenantId, tenantUsername } = req.body;
+        
+        let tenantId = req.user?.tenantId || req.user?.id || bodyTenantId;
+        let tenant = null;
+
+        if (tenantId) {
+            tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+        }
+        if (!tenant && tenantUsername) {
+            tenant = await prisma.tenant.findFirst({ where: { tenantUsername } });
+            if (tenant) tenantId = tenant.id;
+        }
+
+        if (!tenant) {
+            return res.status(404).json({ success: false, message: "Tenant not found" });
+        }
+
+        let plan = null;
+        if (planId && planId !== 'default') {
+            plan = await prisma.subscription_Plan.findUnique({ where: { id: planId } });
+        }
+        if (!plan) {
+            // Find first active plan as fallback
+            plan = await prisma.subscription_Plan.findFirst({ where: { isActive: true } });
+        }
+
+        if (!plan) {
+            return res.status(404).json({ success: false, message: "No active subscription plan found in database" });
+        }
+
+        const startDate = new Date();
+        const durationDays = plan.duration && plan.duration > 0 ? plan.duration : 30;
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + durationDays);
+
+        const updatedTenant = await prisma.$transaction(async (tx) => {
+            const updated = await tx.tenant.update({
+                where: { id: tenant.id },
+                data: {
+                    subscription_planId: plan.id,
+                    subscription_plan_start_date: startDate,
+                    subscription_plan_end_date: endDate,
+                    isActive: true, // Mark tenant as active!
+                    is_plan_assigned: true,
+                },
+            });
+
+            await tx.tenantPlanHistory.create({
+                data: {
+                    tenant_id: tenant.id,
+                    subscription_plan_id: plan.id,
+                    plan_name: plan.name,
+                    expires_at: endDate,
+                    status: "ACTIVE",
+                },
+            });
+
+            return updated;
+        });
+
+        console.log(`[Subscription] Activated tenant ${updatedTenant.tenantUsername} (${updatedTenant.id}) with plan ${plan.name}`);
+
+        return res.json({
+            success: true,
+            message: "Payment completed and tenant activated successfully",
+            tenant: {
+                id: updatedTenant.id,
+                tenantName: updatedTenant.tenantName,
+                tenantUsername: updatedTenant.tenantUsername,
+                role: updatedTenant.role || "TENANT_ADMIN",
+                tenantEmail: updatedTenant.tenantEmail,
+                tenantPhone: updatedTenant.tenantPhone,
+                tenantAddress: updatedTenant.tenantAddress,
+                tenantWebsite: updatedTenant.tenantWebsite,
+                logoUrl: updatedTenant.logoUrl,
+                is_plan_assigned: updatedTenant.is_plan_assigned,
+                isActive: updatedTenant.isActive,
+                faviconUrl: updatedTenant.faviconUrl,
+                themeColor: updatedTenant.themeColor,
+                subscription_planId: updatedTenant.subscription_planId,
+                planName: plan.name,
+                subscription_plan: {
+                    id: plan.id,
+                    name: plan.name,
+                    price: plan.price,
+                    duration: durationDays,
+                },
+                subscription_plan_start_date: updatedTenant.subscription_plan_start_date,
+                subscription_plan_end_date: updatedTenant.subscription_plan_end_date,
+            },
+            plan: {
+                id: plan.id,
+                name: plan.name,
+                duration: durationDays,
+            }
+        });
+    } catch (error) {
+        console.error("ACTIVATE SUBSCRIPTION ERROR:", error);
+        return res.status(500).json({ success: false, message: error.message || "Failed to activate subscription" });
+    }
+};
+

@@ -1,4 +1,5 @@
 import prisma from "../../../core/config/db.js";
+import { sendServerError } from "../../../core/utils/serverError.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { writeAuditLog } from "../../../platform/audit/audit.helper.js";
@@ -264,10 +265,7 @@ export const loginTenant = async (req, res) => {
 
   } catch (error) {
     console.error("TENANT LOGIN ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: "Login failed"
-    });
+    sendServerError(res, error, "Login failed");
   }
 };
 

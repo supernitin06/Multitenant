@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { sendServerError } from "../../core/utils/serverError.js";
 import jwt from "jsonwebtoken";
 import prisma from "../../core/config/db.js";
 import { buildSession } from "./session.js";
@@ -143,7 +144,7 @@ export const loginTenantMember = async (req, res) => {
     res.json({ success: true, message: "Login successful", token, user });
   } catch (error) {
     console.error("Tenant member login error:", error);
-    res.status(500).json({ success: false, message: "Login failed" });
+    sendServerError(res, error, "Login failed");
   }
 };
 

@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { sendServerError } from "../utils/serverError.js";
 import prisma from "../config/db.js";
 
 /**
@@ -121,6 +122,6 @@ export const authMiddleware = async (req, res, next) => {
     next();
   } catch (err) {
     console.error("Auth Middleware Error:", err);
-    return res.status(500).json({ success: false, message: "Could not verify your session" });
+    return sendServerError(res, err, "Could not verify your session");
   }
 };

@@ -11,7 +11,8 @@ function format(level, message, meta) {
 	let out = `${ts} [${level.toUpperCase()}] ${message}`;
 	if (meta !== undefined) {
 		try {
-			out += " " + (typeof meta === "string" ? meta : JSON.stringify(meta));
+			// Error objects serialise to "{}" with JSON.stringify, so print the stack instead
+			out += " " + (meta instanceof Error ? (meta.stack || meta.message) : typeof meta === "string" ? meta : JSON.stringify(meta));
 		} catch (e) {
 			out += " [meta-serialize-error]";
 		}

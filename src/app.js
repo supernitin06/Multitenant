@@ -45,9 +45,17 @@ app.use((req, res, next) => {
 // -----------------------------
 // CORS
 // -----------------------------
-const allowedOrigins = (process.env.CORS_ORIGINS || "")
-  .split(",")
-  .map((o) => o.trim())
+// Deployed frontends are always allowed; CORS_ORIGINS in .env can add more.
+const DEPLOYED_FRONTENDS = [
+  "https://multitenant-admin.vercel.app", // Super Admin panel
+  "https://erp-tenants.vercel.app",       // Tenant portal
+];
+
+const allowedOrigins = [
+  ...DEPLOYED_FRONTENDS,
+  ...(process.env.CORS_ORIGINS || "").split(","),
+]
+  .map((o) => o.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
 // Any port on localhost / 127.0.0.1 / LAN IPs is allowed outside production,

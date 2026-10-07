@@ -9,7 +9,8 @@
     "postinstall": "prisma generate",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js",
+    "db:sync-education": "prisma db execute --file prisma/scripts/add-missing-education-columns.sql --schema prisma"
   },
   "keywords": [],
   "author": "",
